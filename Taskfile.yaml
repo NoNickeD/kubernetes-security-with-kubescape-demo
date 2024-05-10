@@ -1,0 +1,80 @@
+version: '3'
+
+tasks:
+  create-local-cluster:
+    desc: "Create a local Kubernetes cluster using KinD."
+    cmds:
+      - echo "🚀 Creating local cluster"
+      - kind create cluster --config kind-config.yaml --name srekubecraft
+      - kind get clusters
+    silent: true
+
+  setup-kube-context:
+    desc: "Set up the Kubernetes context for the local cluster."
+    cmds:
+      - echo "🔧 Setting up Kubernetes context"
+      - kubectl cluster-info --context kind-srekubecraft
+    silent: true
+
+  delete-local-cluster:
+    desc: "Delete the local Kubernetes cluster."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "🗑️ Deleting local cluster"
+      - kind delete cluster -n srekubecraft
+    silent: true
+
+  install-metric-server:
+    desc: "Install the Kubernetes Metrics Server."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "📊 Installing the Kubernetes Metrics Server"
+      - helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+      - helm repo update metrics-server
+      - helm install metrics-server metrics-server/metrics-server --namespace kube-system --set args[0]="--kubelet-insecure-tls"
+    silent: true
+  
+  add-bitnami-repo:
+    desc: "Add Bitnami repositories."
+    cmds:
+      - helm repo add bitnami https://charts.bitnami.com/bitnami
+      - helm repo update bitnami
+    silent: true
+    
+  install-wordpress:
+    desc: "Install WordPress with MySQL."
+    deps:
+      - add-bitnami-repo
+    cmds:
+      - helm install wordpress bitnami/wordpress --set mariadb.enabled=true --set mariadb.auth.rootPassword=secretpassword --set wordpressUsername=admin --set wordpressPassword=password --set wordpressEmail=user@demo.xyz --namespace default
+    silent: true
+
+  verify-installation:
+    desc: "Verify that WordPress and MySQL are up and running."
+    cmds:
+      - kubectl get pods --namespace default
+    silent: true
+
+  install-kubescape-operator:
+    desc: "Install the Kubescape Operator."
+    cmds:
+     - helm repo add kubescape https://kubescape.github.io/helm-charts/ 
+     - helm repo update kubescape
+     - helm upgrade --install kubescape kubescape/kubescape-operator -n kubescape --create-namespace --set clusterName=`kubectl config current-context` --set capabilities.continuousScan=enable
+    silent: true
+
+
+
+  full-deploy-local:
+    desc: "Deploy the full application stack to the local Kubernetes cluster."
+    cmds:
+      - echo "🚀 Deploying the full application stack"
+      - task: create-local-cluster
+      - task: setup-kube-context
+      - task: install-metric-server
+      - task: install-wordpress
+      - task: verify-installation
+      - task: install-kubescape-operator
+    silent: true
